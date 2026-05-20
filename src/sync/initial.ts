@@ -36,14 +36,14 @@ async function fetchAllThreadIds(): Promise<string[]> {
 
 async function fetchMessageIdsInThread(threadId: string): Promise<string[]> {
   const gmail = getGmailClient()
-  const response = await gmail.users.messages.list({
+
+  const thread = await gmail.users.threads.get({
     userId: 'me',
-    q: `rfc822msgid:* thread:${threadId}`,
-    maxResults: 500,
-    fields: 'messages(id)',
+    id: threadId,
+    format: 'metadata', // or 'full' if you need message bodies
   })
 
-  return (response.data.messages || [])
+  return (thread.data.messages || [])
     .map((m) => m.id)
     .filter((id): id is string => id !== null && id !== undefined)
 }
