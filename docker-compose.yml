@@ -1,0 +1,16 @@
+services:
+  arangodb:
+    image: arangodb:3.12
+    container_name: inbox_graph_arangodb
+    restart: unless-stopped
+    ports:
+      - "8529:8529"
+    environment:
+      - ARANGO_ROOT_PASSWORD=${ARANGO_PASSWORD:-changeme}
+    volumes:
+      - arangodb_data:/var/lib/arangodb3
+      - arangodb_apps:/var/lib/arangodb3-apps
+
+volumes:
+  arangodb_data:
+  arangodb_apps:
