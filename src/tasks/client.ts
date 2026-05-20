@@ -11,7 +11,9 @@ function getClient(): { client: CloudTasksClient; queuePath: string } {
 
   if (!queuePath) {
     if (!config.cloudTasks.projectId || !config.cloudTasks.location || !config.cloudTasks.queue) {
-      throw new Error('Cloud Tasks configuration is missing. Set GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_TASKS_LOCATION, and GOOGLE_CLOUD_TASKS_QUEUE')
+      throw new Error(
+        'Cloud Tasks configuration is missing. Set GOOGLE_CLOUD_PROJECT, GOOGLE_CLOUD_TASKS_LOCATION, and GOOGLE_CLOUD_TASKS_QUEUE',
+      )
     }
     queuePath = tasksClient.queuePath(
       config.cloudTasks.projectId,

@@ -36,6 +36,7 @@ export const config = {
     queue: env.GOOGLE_CLOUD_TASKS_QUEUE,
     location: env.GOOGLE_CLOUD_TASKS_LOCATION,
     handlerUrl: env.GOOGLE_CLOUD_TASKS_HANDLER_URL,
+    topic: env.GOOGLE_CLOUD_TASKS_TOPIC,
   },
   server: {
     port: parseInt(env.PORT || '3000', 10),
