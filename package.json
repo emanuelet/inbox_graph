@@ -18,16 +18,21 @@
   "dependencies": {
     "@google-cloud/tasks": "^6.2.2",
     "@hono/node-server": "^2.0.3",
+    "@hono/react-renderer": "^1.0.1",
     "arangojs": "^10.3.0",
     "dotenv": "^17.4.2",
     "google-auth-library": "^10.6.2",
     "googleapis": "^171.4.0",
     "hono": "^4.12.19",
-    "p-limit": "^7.3.0"
+    "p-limit": "^7.3.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.15",
     "@types/node": "24.x",
+    "@types/react": "^19.2.15",
+    "@types/react-dom": "^19.2.3",
     "tsx": "4.21.x",
     "typescript": "6.0.3"
   }
