@@ -83,9 +83,8 @@ search.get('/search/graph/person/:email', async (c) => {
   const cursor = await db.query(
     `
     LET person = DOCUMENT(CONCAT("people/", @personKey))
-    FILTER person != null
 
-    LET sentMessages = (
+    LET sentMessages = person != null ? (
       FOR msg IN 1..1 INBOUND person sent_by
         RETURN {
           _key: msg._key,
@@ -96,9 +95,9 @@ search.get('/search/graph/person/:email', async (c) => {
           threadId: msg.threadId,
           direction: "sent"
         }
-    )
+    ) : []
 
-    LET receivedMessages = (
+    LET receivedMessages = person != null ? (
       FOR msg IN 1..1 INBOUND person received_by
         RETURN {
           _key: msg._key,
@@ -109,17 +108,21 @@ search.get('/search/graph/person/:email', async (c) => {
           threadId: msg.threadId,
           direction: "received"
         }
-    )
+    ) : []
 
-    LET threads = (
-      FOR thread IN 1..1 OUTBOUND sentMessages in_thread
+    LET allMessages = APPEND(sentMessages, receivedMessages)
+
+    LET threads = person != null ? (
+      FOR msg IN allMessages
+        LET thread = DOCUMENT(CONCAT("threads/", msg.threadId))
+        FILTER thread != null
         RETURN DISTINCT {
           _key: thread._key,
           updatedAt: thread.updatedAt
         }
-    )
+    ) : []
 
-    RETURN {
+    RETURN person != null ? {
       person: {
         email: person.email,
         name: person.name,
@@ -130,9 +133,9 @@ search.get('/search/graph/person/:email', async (c) => {
         received: LENGTH(receivedMessages),
         threads: LENGTH(threads)
       },
-      messages: APPEND(sentMessages, receivedMessages),
+      messages: allMessages,
       threads: threads
-    }
+    } : null
     `,
     { personKey },
   )
@@ -151,10 +154,9 @@ search.get('/search/graph/thread/:threadId', async (c) => {
   const cursor = await db.query(
     `
     LET thread = DOCUMENT(CONCAT("threads/", @threadId))
-    FILTER thread != null
 
-    LET messages = (
-      FOR msg IN 1..1 OUTBOUND thread in_thread
+    LET messages = thread != null ? (
+      FOR msg IN 1..1 INBOUND thread in_thread
         LET sender = (
           FOR p IN 1..1 INBOUND msg sent_by
             RETURN { email: p.email, name: p.name }
@@ -163,6 +165,7 @@ search.get('/search/graph/thread/:threadId', async (c) => {
           FOR p IN 1..1 INBOUND msg received_by
             RETURN { email: p.email, name: p.name }
         )
+        SORT msg.internalDate ASC
         RETURN {
           _key: msg._key,
           subject: msg.subject,
@@ -172,16 +175,16 @@ search.get('/search/graph/thread/:threadId', async (c) => {
           sender: sender,
           recipients: recipients
         }
-    )
+    ) : []
 
-    RETURN {
+    RETURN thread != null ? {
       thread: {
         _key: thread._key,
         updatedAt: thread.updatedAt
       },
       messageCount: LENGTH(messages),
-      messages: SORT messages BY messages.internalDate ASC
-    }
+      messages: messages
+    } : null
     `,
     { threadId },
   )
