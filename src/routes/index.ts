@@ -1,5 +1,6 @@
 import { Hono } from 'hono'
 import auth from './auth.js'
+import html from './html.js'
 import search from './search.js'
 import tasks from './tasks.js'
 import ui from './ui.js'
@@ -13,6 +14,7 @@ routes.get('/health', (c) => {
 })
 
 routes.route('/', auth)
+routes.route('/', html)
 routes.route('/', search)
 routes.route('/', webhook)
 routes.route('/', tasks)
