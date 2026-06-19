@@ -50,7 +50,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useToast, POSITION } from 'vue-toastification'
+import { toast } from 'vue3-toastify'
 import { Mail, Search } from '@lucide/vue'
 import Layout from './Layout.vue'
 import ResultsList from './ResultsList.vue'
@@ -60,7 +60,6 @@ import type { ThreadMessageData } from './ThreadView.vue'
 
 const EMAIL_RE = /^[\w.+-]+@[\w-]+\.[\w.-]+$/
 
-const toast = useToast()
 const query = ref('')
 const searchInput = ref<HTMLInputElement>()
 const loading = ref(false)
