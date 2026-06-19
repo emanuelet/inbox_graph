@@ -5,6 +5,7 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig(({ isSsrBuild }) => ({
   build: {
     target: 'ES2022',
+    cssTarget: 'es2020',
     sourcemap: true,
     emptyOutDir: !isSsrBuild,
     rollupOptions: {
