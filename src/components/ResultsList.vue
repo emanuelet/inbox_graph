@@ -2,7 +2,7 @@
   <div v-if="!messages.length" class="empty">No results found</div>
   <template v-else>
     <PersonCard v-if="person && stats" :data="{ person, stats }" />
-    <MessageCard v-for="m in messages" :key="m._key" :message="m" />
+    <MessageCard v-for="m in messages" :key="m._key" :message="m" @click="emit('select-thread', m.threadId)" />
   </template>
 </template>
 
@@ -15,5 +15,9 @@ defineProps<{
   messages: MessageData[]
   person?: { name: string; email: string; _key: string } | null
   stats?: { sent: number; received: number; threads: number } | null
+}>()
+
+const emit = defineEmits<{
+  'select-thread': [threadId: string]
 }>()
 </script>

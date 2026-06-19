@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server'
+import { serveStatic } from '@hono/node-server/serve-static'
 import { Hono } from 'hono'
 import { config } from './config.js'
 import { initDb } from './db/init.js'
@@ -7,6 +8,10 @@ import { setupGmailWatch } from './gmail/watch.js'
 import routes from './routes/index.js'
 
 const app = new Hono()
+
+if (process.env.NODE_ENV === 'production') {
+  app.use('/client/*', serveStatic({ root: 'dist/' }))
+}
 
 app.route('/', routes)
 

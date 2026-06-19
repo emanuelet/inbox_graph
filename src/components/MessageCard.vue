@@ -1,5 +1,5 @@
 <template>
-  <div class="message-card" :data-thread="message.threadId">
+  <div class="message-card" @click="emit('click')">
     <div class="message-subject">
       <template v-if="sender">{{ sender }} — </template>
       {{ message.subject || '(no subject)' }}
@@ -30,6 +30,10 @@ export interface MessageData {
 
 const props = defineProps<{
   message: MessageData
+}>()
+
+const emit = defineEmits<{
+  click: []
 }>()
 
 const sender = computed(() => props.message.sender?.name || props.message.sender?.email || '')

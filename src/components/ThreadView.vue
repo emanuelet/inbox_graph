@@ -2,7 +2,7 @@
   <div class="thread-view">
     <div class="thread-header">
       <h2>Thread: {{ subject }}</h2>
-      <button id="back-btn" type="button" class="btn btn-secondary">Back</button>
+      <button type="button" class="btn btn-secondary" @click="emit('back')">Back</button>
     </div>
     <div v-for="m in messages" :key="m._key" class="thread-message">
       <div class="thread-message-header">
@@ -30,6 +30,10 @@ export interface ThreadMessageData {
 const props = defineProps<{
   thread: { _key: string; updatedAt?: number }
   messages: ThreadMessageData[]
+}>()
+
+const emit = defineEmits<{
+  back: []
 }>()
 
 const subject = computed(() => props.messages[0]?.subject || '(no subject)')
