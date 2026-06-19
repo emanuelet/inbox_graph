@@ -22,7 +22,7 @@ auth.get('/auth/google/callback', async (c) => {
     const { tokens } = await oauth2Client.getToken(code)
     await saveToken(tokens)
     oauth2Client.setCredentials(tokens)
-    return c.json({ status: 'authenticated', message: 'Token saved to ArangoDB' })
+    return c.redirect('/?auth=success')
   } catch (error) {
     console.error('OAuth callback error:', error)
     return c.json({ error: 'Failed to authenticate' }, 500)
