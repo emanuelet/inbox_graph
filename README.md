@@ -58,14 +58,49 @@ cp .env.example .env
 pnpm run dev
 ```
 
-Open http://localhost:3000, click the auth link to sign in with Google, then start syncing and searching.
+Open http://localhost:3000, click the auth link to sign in with Google.
+
+## Indexing
+
+### Initial sync
+
+After authenticating, trigger a full walk of all Gmail threads:
+
+```bash
+curl -X POST http://localhost:3000/tasks/sync
+```
+
+This lists all thread IDs, fetches message metadata for each, and stores messages, people, threads, and their relationships in ArangoDB. Depending on inbox size, this may take a few minutes.
+
+### Incremental sync
+
+Once a `historyId` has been saved (from an initial sync), subsequent calls to `/tasks/sync` use the Gmail History API to pick up only new/changed messages since the last sync:
+
+```bash
+curl -X POST http://localhost:3000/tasks/sync
+```
+
+If no `historyId` is found, it falls back to a full initial sync.
+
+### Push notifications (optional)
+
+1. Set up a Google Cloud Pub/Sub topic and subscription
+2. Add your Gmail Pub/Sub topic name to `.env` as `GMAIL_PUBSUB_TOPIC`
+3. The server calls `setupGmailWatch()` on startup to register the INBOX push notification
+4. Notifications arrive at `POST /webhook/gmail` and enqueue a Cloud Tasks sync task
+
+See [Gmail Pub/Sub documentation](https://developers.google.com/gmail/api/guides/push) for setup details.
+
+## Search
+
+Open http://localhost:3000, type a query in the search bar, and hit Enter. You can also enter an email address to lookup a person's graph.
 
 ## Scripts
 
 | Command | Description |
 |---|---|
 | `pnpm run dev` | Start dev server with hot reload |
-| `pnpm run build` | Compile TypeScript |
+| `pnpm run build` | Build SSR bundle + client bundle |
 | `pnpm run start` | Run compiled server |
 | `pnpm run lint` | Lint with Biome |
 | `pnpm run format` | Format with Biome |
@@ -106,5 +141,5 @@ GET /health
 - **Web framework:** Hono
 - **Database:** ArangoDB (arangojs)
 - **Gmail API:** googleapis + google-auth-library
-- **Frontend:** React 19 (server-rendered via Hono)
+- **Frontend:** Vue 3 (server-rendered via Vite + Hono)
 - **Linter:** Biome
