@@ -1,15 +1,6 @@
-allowBuilds:
-  esbuild: true
-  protobufjs: true
-minimumReleaseAge: 4320
-
-blockExoticSubdeps: true
-
-trustPolicy: "no-downgrade"
-
-strictDepBuilds: true
-
-ignoreScripts: true
-
-trustPolicyExclude:
-  - undici-types
+packages:
+  - packages/*
+trustPolicy: off
+onlyBuiltDependencies:
+  - esbuild
+  - protobuf
