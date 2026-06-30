@@ -22,20 +22,20 @@ search.get("/search", async (c) => {
     const cursor = await db.query(
       `
       FOR doc IN email_search
-        SEARCH ANALYZER(PHRASE(doc.subject, @q) OR PHRASE(doc.snippet, @q), "text_en")
+        SEARCH ANALYZER(PHRASE(doc.subject, @q) OR PHRASE(doc.snippet, @q) OR PHRASE(doc.bodyText, @q), "text_en")
         LET isMessage = doc._id LIKE "messages/%"
         FILTER isMessage
-        SORT BM25(doc) DESC
+        SORT doc.internalDate DESC
         LIMIT @limit
         RETURN {
           _key: doc._key,
           type: "message",
           subject: doc.subject,
           snippet: doc.snippet,
+          payload: doc.payload,
           internalDate: doc.internalDate,
           gmailUrl: doc.gmailUrl,
-          threadId: doc.threadId,
-          score: BM25(doc)
+          threadId: doc.threadId
         }
       `,
       { q, limit },

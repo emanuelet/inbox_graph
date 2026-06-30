@@ -1,12 +1,14 @@
 import type { gmail_v1 } from "googleapis";
 import { db } from "../db/index.js";
-import { safeBase64 } from "../gmail/helpers.js";
+import { safeBase64, extractBodyText } from "../gmail/helpers.js";
 
 interface ParsedMessage {
   messageId: string;
   threadId: string;
   subject: string;
   snippet: string;
+  payload: unknown;
+  bodyText: string;
   internalDate: string;
   from: { name: string; email: string };
   to: Array<{ name: string; email: string }>;
@@ -65,6 +67,8 @@ function parseGmailMessage(
     threadId,
     subject,
     snippet,
+    payload: gmailMessage.payload,
+    bodyText: extractBodyText(gmailMessage.payload || {}),
     internalDate,
     from,
     to: parseAddr(toRaw),
@@ -90,6 +94,8 @@ export async function processMessagesBatch(
     threadId: m.threadId,
     subject: m.subject,
     snippet: m.snippet,
+    payload: m.payload,
+    bodyText: m.bodyText,
     internalDate: m.internalDate,
     gmailUrl: `https://mail.google.com/mail/u/0/#all/${m.messageId}`,
     historyId: m.historyId,

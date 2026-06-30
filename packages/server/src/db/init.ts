@@ -38,6 +38,7 @@ async function ensureSearchView() {
         fields: {
           subject: { analyzers: ["text_en"] },
           snippet: { analyzers: ["text_en"] },
+          bodyText: { analyzers: ["text_en"] },
         },
       },
       people: {
