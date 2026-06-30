@@ -7,8 +7,10 @@
     </div>
     <div class="message-snippet">{{ message.snippet || '' }}</div>
     <div class="message-meta">
-      <span>{{ formattedDate }}</span>
-      <span v-if="message.score != null" class="message-score">{{ message.score.toFixed(2) }}</span>
+      <span class="message-date">{{ formattedDate }}</span>
+      <a v-if="message.gmailUrl" :href="message.gmailUrl" target="_blank" class="message-gmail-link" @click.stop>
+        Open in Gmail
+      </a>
     </div>
   </div>
 </template>
@@ -20,10 +22,10 @@ export interface MessageData {
   _key: string
   subject?: string
   snippet?: string
+  payload?: unknown
   internalDate?: string
   threadId: string
   gmailUrl?: string
-  score?: number
   direction?: string
   sender?: { name: string; email: string }
 }

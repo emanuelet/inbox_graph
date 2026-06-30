@@ -14,8 +14,6 @@ $radius-lg: 8px;
   --text-snippet: #444;
   --primary: #4285f4;
   --primary-hover: #3367d6;
-  --score-bg: #e8f0fe;
-  --score-text: #1a73e8;
   --success: #34a853;
   --error: #ea4335;
   --stats-bg: #f0f0f0;
@@ -37,8 +35,6 @@ $radius-lg: 8px;
     --text-snippet: #bbb;
     --primary: #5b9cf6;
     --primary-hover: #4a8be5;
-    --score-bg: #1a3a5c;
-    --score-text: #8ab4f8;
     --success: #34a853;
     --error: #ea4335;
     --stats-bg: #2a2a2a;
@@ -180,16 +176,24 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 12px;
-  color: var(--text-secondary);
+  margin-top: 8px;
 }
 
-.message-score {
-  background: var(--score-bg);
-  color: var(--score-text);
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 11px;
+.message-date {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.message-gmail-link {
+  font-size: 12px;
+  color: var(--primary);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: underline;
+  }
 }
 
 .thread-view {
