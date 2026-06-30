@@ -41,16 +41,16 @@ cp .env.example .env
 
 ### Environment variables
 
-| Variable | Required | Description |
-|---|---|---|
-| `GOOGLE_CLIENT_ID` | Yes | Google OAuth2 client ID |
-| `GOOGLE_CLIENT_SECRET` | Yes | Google OAuth2 client secret |
-| `GOOGLE_REDIRECT_URI` | Yes | OAuth callback (default: `http://localhost:3000/auth/google/callback`) |
-| `ARANGO_URL` | Yes | ArangoDB URL (default: `http://localhost:8529`) |
-| `ARANGO_DATABASE` | Yes | Database name (default: `inbox_graph`) |
-| `ARANGO_USERNAME` | Yes | ArangoDB username (default: `root`) |
-| `ARANGO_PASSWORD` | Yes | ArangoDB password |
-| `PORT` | No | Server port (default: `3000`) |
+| Variable               | Required | Description                                                            |
+| ---------------------- | -------- | ---------------------------------------------------------------------- |
+| `GOOGLE_CLIENT_ID`     | Yes      | Google OAuth2 client ID                                                |
+| `GOOGLE_CLIENT_SECRET` | Yes      | Google OAuth2 client secret                                            |
+| `GOOGLE_REDIRECT_URI`  | Yes      | OAuth callback (default: `http://localhost:3000/auth/google/callback`) |
+| `ARANGO_URL`           | Yes      | ArangoDB URL (default: `http://localhost:8529`)                        |
+| `ARANGO_DATABASE`      | Yes      | Database name (default: `inbox_graph`)                                 |
+| `ARANGO_USERNAME`      | Yes      | ArangoDB username (default: `root`)                                    |
+| `ARANGO_PASSWORD`      | Yes      | ArangoDB password                                                      |
+| `PORT`                 | No       | Server port (default: `3000`)                                          |
 
 ## Run
 
@@ -67,7 +67,7 @@ Open http://localhost:3000, click the auth link to sign in with Google.
 After authenticating, trigger a full walk of all Gmail threads:
 
 ```bash
-curl -X POST http://localhost:3000/tasks/sync
+curl -X POST http://localhost:4000/api/tasks/sync -d "{}"
 ```
 
 This lists all thread IDs, fetches message metadata for each, and stores messages, people, threads, and their relationships in ArangoDB. Depending on inbox size, this may take a few minutes.
@@ -77,7 +77,7 @@ This lists all thread IDs, fetches message metadata for each, and stores message
 Once a `historyId` has been saved (from an initial sync), subsequent calls to `/tasks/sync` use the Gmail History API to pick up only new/changed messages since the last sync:
 
 ```bash
-curl -X POST http://localhost:3000/tasks/sync
+curl -X POST http://localhost:4000/api/tasks/sync -d "{}"
 ```
 
 If no `historyId` is found, it falls back to a full initial sync.
@@ -97,26 +97,26 @@ Open http://localhost:3000, type a query in the search bar, and hit Enter. You c
 
 ## Scripts
 
-| Command | Description |
-|---|---|
-| `pnpm run dev` | Start dev server with hot reload |
-| `pnpm run build` | Build SSR bundle + client bundle |
-| `pnpm run start` | Run compiled server |
-| `pnpm run lint` | Lint with Biome |
-| `pnpm run format` | Format with Biome |
+| Command           | Description                      |
+| ----------------- | -------------------------------- |
+| `pnpm run dev`    | Start dev server with hot reload |
+| `pnpm run build`  | Build SSR bundle + client bundle |
+| `pnpm run start`  | Run compiled server              |
+| `pnpm run lint`   | Lint with Biome                  |
+| `pnpm run format` | Format with Biome                |
 
 ## API
 
 ### Search messages/people
 
 ```
-GET /search?q=<query>&type=<messages|people|all>&limit=<1-200>
+GET /api/search?q=<query>&type=<messages|people|all>&limit=<1-200>
 ```
 
 ### Person graph lookup
 
 ```
-GET /search/graph/person/<email>
+GET /api/search/graph/person/<email>
 ```
 
 Returns the person, their sent/received messages, stats, and threads.
@@ -124,7 +124,7 @@ Returns the person, their sent/received messages, stats, and threads.
 ### Thread graph lookup
 
 ```
-GET /search/graph/thread/<threadId>
+GET /api/search/graph/thread/<threadId>
 ```
 
 Returns all messages in a thread with sender/recipient info.
@@ -132,7 +132,7 @@ Returns all messages in a thread with sender/recipient info.
 ### Health
 
 ```
-GET /health
+GET /api/health
 ```
 
 ## Tech stack

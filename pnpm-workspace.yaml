@@ -4,3 +4,6 @@ trustPolicy: off
 onlyBuiltDependencies:
   - esbuild
   - protobuf
+allowBuilds:
+  esbuild: true
+  protobufjs: true
