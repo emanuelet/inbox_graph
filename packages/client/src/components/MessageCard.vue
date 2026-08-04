@@ -42,6 +42,6 @@ const sender = computed(() => props.message.sender?.name || props.message.sender
 
 const formattedDate = computed(() => {
   if (!props.message.internalDate) return ''
-  return new Date(parseInt(props.message.internalDate, 10)).toLocaleString()
+  return new Date(parseInt(props.message.internalDate, 10)).toLocaleString("en-AU")
 })
 </script>

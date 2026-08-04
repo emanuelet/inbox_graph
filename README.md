@@ -5,9 +5,9 @@ Index your Gmail inbox into ArangoDB as a graph — people, messages, threads, a
 ## How it works
 
 1. **OAuth2** — authenticate with Gmail (read-only scope)
-2. **Initial sync** — walks all threads, fetches message metadata, stores in ArangoDB
+2. **Initial sync** — walks all mailbox threads, fetches full message bodies, stores in ArangoDB
 3. **Graph model** — `messages` and `people` as document collections, `sent_by` / `received_by` / `in_thread` as edge collections
-4. **Search** — ArangoSearch full-text view over message subjects, snippets, and person names/emails
+4. **Search** — ranked ArangoSearch full-text view over subjects, bodies, participants, and people
 5. **Incremental sync** — uses Gmail History API to pick up new messages since last sync
 6. **Push notifications** — optional Gmail Pub/Sub webhook + Google Cloud Tasks for continuous sync
 
@@ -35,7 +35,7 @@ cp .env.example .env
 # 4. Set up Google OAuth2 credentials
 # - Go to https://console.cloud.google.com/apis/credentials
 # - Create an OAuth 2.0 Client ID (Web application)
-# - Add http://localhost:3000/auth/google/callback as redirect URI
+# - Add http://localhost:4000/auth/google/callback as redirect URI
 # - Download the JSON and save as credentials.json in the project root
 ```
 
@@ -58,7 +58,7 @@ cp .env.example .env
 pnpm run dev
 ```
 
-Open http://localhost:3000, click the auth link to sign in with Google.
+Open http://localhost:5173, click the auth link to sign in with Google.
 
 ## Indexing
 
@@ -70,7 +70,15 @@ After authenticating, trigger a full walk of all Gmail threads:
 curl -X POST http://localhost:4000/api/tasks/sync -d "{}"
 ```
 
-This lists all thread IDs, fetches message metadata for each, and stores messages, people, threads, and their relationships in ArangoDB. Depending on inbox size, this may take a few minutes.
+This lists all mailbox thread IDs, fetches full MIME messages, and stores messages, people, threads, and their relationships in ArangoDB. Depending on inbox size, this may take a few minutes.
+
+To repair an existing index after upgrading, force a full reconciliatory sync:
+
+```bash
+curl -X POST http://localhost:4000/api/tasks/sync \
+  -H "content-type: application/json" \
+  -d '{"mode":"full"}'
+```
 
 ### Incremental sync
 
@@ -93,7 +101,9 @@ See [Gmail Pub/Sub documentation](https://developers.google.com/gmail/api/guides
 
 ## Search
 
-Open http://localhost:3000, type a query in the search bar, and hit Enter. You can also enter an email address to lookup a person's graph.
+Open http://localhost:3000, type a query in the search bar, and hit Enter. Results are ranked by relevance, then recency. You can also enter an email address to lookup a person's graph.
+
+Supported filters: `from:`, `to:`, `subject:`, `after:YYYY-MM-DD`, `before:YYYY-MM-DD`, and `has:attachment`. Put exact text in quotes, for example `"renewal proposal"`.
 
 ## Scripts
 

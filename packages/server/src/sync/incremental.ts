@@ -32,20 +32,44 @@ async function saveHistoryId(historyId: string) {
 
 async function fetchMessageDetail(
   id: string,
-): Promise<gmail_v1.Schema$Message | null> {
+): Promise<gmail_v1.Schema$Message> {
   const gmail = getGmailClient();
   try {
     const response = await gmail.users.messages.get({
       userId: "me",
       id,
-      format: "metadata",
-      metadataHeaders: ["From", "To", "Cc", "Subject", "Date"],
+      format: "full",
     });
     return response.data;
   } catch (error) {
     console.error(`Failed to fetch message ${id}:`, error);
-    return null;
+    throw error;
   }
+}
+
+async function deleteMessages(ids: string[]) {
+  if (ids.length === 0) return;
+  const messageIds = ids.map((id) => `messages/${id}`);
+
+  for (const collection of ["sent_by", "received_by", "in_thread"]) {
+    await db.query(
+      `
+      FOR edge IN @@collection
+        FILTER edge._from IN @messageIds
+        REMOVE edge IN @@collection
+      `,
+      { "@collection": collection, messageIds },
+    );
+  }
+
+  await db.query(
+    `
+    FOR id IN @ids
+      REMOVE { _key: id } IN messages
+      OPTIONS { ignoreErrors: true }
+    `,
+    { ids },
+  );
 }
 
 export async function runIncrementalSync() {
@@ -75,38 +99,49 @@ export async function runIncrementalSync() {
       const historyEntries = response.data.history || [];
       maxHistoryId = response.data.historyId || maxHistoryId;
 
-      const messagesToAdd: gmail_v1.Schema$Message[] = [];
-      const messagesToDelete: string[] = [];
+      const changedMessageIds = new Set<string>();
+      const messagesToDelete = new Set<string>();
 
       for (const entry of historyEntries) {
+        for (const message of entry.messages || []) {
+          if (message.id) changedMessageIds.add(message.id);
+        }
         const messagesAdded = entry.messagesAdded || [];
         const messagesDeleted = entry.messagesDeleted || [];
 
         for (const msgRef of messagesAdded) {
           if (msgRef.message?.id) {
-            messagesToAdd.push(msgRef.message);
+            changedMessageIds.add(msgRef.message.id);
           }
         }
 
         for (const msgRef of messagesDeleted) {
           if (msgRef.message?.id) {
-            messagesToDelete.push(msgRef.message.id);
+            messagesToDelete.add(msgRef.message.id);
           }
         }
       }
 
-      if (messagesToAdd.length > 0) {
+      for (const id of messagesToDelete) changedMessageIds.delete(id);
+
+      if (changedMessageIds.size > 0) {
         const detailResults = await Promise.allSettled(
-          messagesToAdd
-            .map((m) => m.id)
-            .filter((id): id is string => id !== null && id !== undefined)
-            .map((id) => messageLimit(() => fetchMessageDetail(id))),
+          [...changedMessageIds].map((id) =>
+            messageLimit(() => fetchMessageDetail(id)),
+          ),
         );
+
+        const failedMessages = detailResults.filter(
+          (result) => result.status === "rejected",
+        );
+        if (failedMessages.length > 0) {
+          throw new Error(`Failed to fetch ${failedMessages.length} changed message(s)`);
+        }
 
         const messages = detailResults
           .filter(
             (r): r is PromiseFulfilledResult<gmail_v1.Schema$Message> =>
-              r.status === "fulfilled" && r.value !== null,
+              r.status === "fulfilled",
           )
           .map((r) => r.value);
 
@@ -121,16 +156,7 @@ export async function runIncrementalSync() {
         }
       }
 
-      if (messagesToDelete.length > 0) {
-        await db.query(
-          `
-          FOR id IN @ids
-            REMOVE { _key: id } IN messages
-            OPTIONS { ignoreErrors: true }
-          `,
-          { ids: messagesToDelete },
-        );
-      }
+      await deleteMessages([...messagesToDelete]);
 
       nextPageToken = response.data.nextPageToken || undefined;
     } while (nextPageToken);
@@ -140,11 +166,12 @@ export async function runIncrementalSync() {
   } catch (error: unknown) {
     const err = error as { code?: number; message?: string };
     if (err.code === 404 || err.message?.includes("requestedStartHistory")) {
-      console.warn("historyId expired. A full resync is required.");
-      console.warn("Run initial sync to recover.");
+      console.warn("historyId expired. Running a full reconciliation sync.");
+      const { runInitialSync } = await import("./initial.js");
+      await runInitialSync();
     } else {
       console.error("Incremental sync failed:", error);
+      throw error;
     }
-    throw error;
   }
 }

@@ -23,7 +23,7 @@ async function bootstrap() {
     await setupGmailWatch();
   } catch {
     console.log(
-      "Gmail API not accessible. Complete OAuth flow at /auth/google",
+      `Gmail API not accessible. Complete OAuth flow at http://localhost:${config.server.port}/api/auth/google`,
     );
   }
 }

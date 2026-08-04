@@ -2,45 +2,39 @@ export function safeBase64(str: string): string {
   return Buffer.from(str.toLowerCase()).toString("base64url");
 }
 
-export function extractBodyText(payload: {
-  mimeType?: string;
-  body?: { data?: string };
-  parts?: Array<{
-    mimeType?: string;
-    body?: { data?: string };
-    parts?: Array<{ mimeType?: string; body?: { data?: string } }>;
-  }>;
-}): string {
-  const texts: string[] = [];
+interface MimePart {
+  mimeType?: string | null;
+  filename?: string | null;
+  body?: { data?: string | null; attachmentId?: string | null };
+  parts?: MimePart[];
+}
 
-  if (payload.body?.data) {
-    const decoded = Buffer.from(payload.body.data, "base64url").toString("utf-8");
-    if (payload.mimeType === "text/plain") {
-      texts.push(decoded);
-    } else if (payload.mimeType === "text/html") {
-      texts.push(decoded.replace(/<[^>]*>/g, ""));
-    }
-  }
+export function hasAttachment(payload: MimePart): boolean {
+  if (payload.filename && payload.body?.attachmentId) return true;
+  return (payload.parts || []).some(hasAttachment);
+}
 
-  if (payload.parts) {
-    for (const part of payload.parts) {
-      if (part.mimeType === "text/plain" && part.body?.data) {
-        texts.push(Buffer.from(part.body.data, "base64url").toString("utf-8"));
-      } else if (part.mimeType === "text/html" && part.body?.data) {
-        texts.push(Buffer.from(part.body.data, "base64url").toString("utf-8").replace(/<[^>]*>/g, ""));
-      } else if (part.parts) {
-        for (const sub of part.parts) {
-          if (sub.mimeType === "text/plain" && sub.body?.data) {
-            texts.push(Buffer.from(sub.body.data, "base64url").toString("utf-8"));
-          } else if (sub.mimeType === "text/html" && sub.body?.data) {
-            texts.push(Buffer.from(sub.body.data, "base64url").toString("utf-8").replace(/<[^>]*>/g, ""));
-          }
-        }
+export function extractBodyText(payload: MimePart): string {
+  const plainTexts: string[] = [];
+  const htmlTexts: string[] = [];
+
+  const visit = (part: MimePart) => {
+    if (part.body?.data && part.mimeType?.startsWith("text/")) {
+      const decoded = Buffer.from(part.body.data, "base64url").toString("utf-8");
+      if (part.mimeType === "text/plain") plainTexts.push(decoded);
+      if (part.mimeType === "text/html") {
+        htmlTexts.push(decoded.replace(/<[^>]*>/g, " "));
       }
     }
-  }
 
-  return texts.join("\n").replace(/\s+/g, " ").trim();
+    for (const child of part.parts || []) visit(child);
+  };
+
+  visit(payload);
+  return (plainTexts.length > 0 ? plainTexts : htmlTexts)
+    .join("\n")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function extractHeader(
