@@ -1,5 +1,9 @@
 packages:
   - packages/*
+overrides:
+  brace-expansion: 2.1.4
+  immutable: 5.1.8
+  protobufjs: 7.6.5
 trustPolicy: off
 onlyBuiltDependencies:
   - esbuild
@@ -7,3 +11,5 @@ onlyBuiltDependencies:
 allowBuilds:
   esbuild: true
   protobufjs: true
+minimumReleaseAgeExclude:
+  - hono@4.12.34

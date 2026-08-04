@@ -9,6 +9,6 @@
     "typecheck": "pnpm --filter client exec tsc --noEmit -p ../server/tsconfig.json && pnpm --filter client exec vue-tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
-    "concurrently": "^10.0.3"
+    "concurrently": "^10.0.4"
   }
 }
