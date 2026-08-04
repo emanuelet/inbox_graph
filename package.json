@@ -4,7 +4,9 @@
   "scripts": {
     "dev": "concurrently -n server,client -c blue,green \"pnpm --filter server dev\" \"pnpm --filter client dev\"",
     "build": "pnpm --filter client build",
-    "start": "pnpm --filter server start"
+    "start": "pnpm --filter server start",
+    "test": "pnpm --filter server test",
+    "typecheck": "pnpm --filter client exec tsc --noEmit -p ../server/tsconfig.json && pnpm --filter client exec vue-tsc --noEmit -p tsconfig.json"
   },
   "devDependencies": {
     "concurrently": "^10.0.3"

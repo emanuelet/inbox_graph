@@ -1,17 +1,56 @@
 import { Hono } from "hono";
 import { db } from "../db/index.js";
 import { safeBase64 } from "../gmail/helpers.js";
+import { parseSearchQuery } from "../search/query.js";
 
 const search = new Hono();
 
 search.get("/search", async (c) => {
-  const q = c.req.query("q");
+  const q = c.req.query("q")?.trim();
   const type = c.req.query("type") || "all";
-  const limit = Math.min(parseInt(c.req.query("limit") || "50", 10), 200);
+  const limit = Number(c.req.query("limit") || "50");
 
   if (!q) {
     return c.json({ error: 'Query parameter "q" is required' }, 400);
   }
+  if (!["all", "messages", "people"].includes(type)) {
+    return c.json({ error: 'type must be "all", "messages", or "people"' }, 400);
+  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > 200) {
+    return c.json({ error: "limit must be an integer between 1 and 200" }, 400);
+  }
+
+  const parsed = parseSearchQuery(q);
+  const phraseSearch = parsed.phrases
+    .map(
+      (_, index) => `
+        AND ANALYZER(
+          PHRASE(doc.subject, @phrase${index}) OR
+          PHRASE(doc.snippet, @phrase${index}) OR
+          PHRASE(doc.bodyText, @phrase${index}),
+          "text_en"
+        )`,
+    )
+    .join("");
+  const bindVars = {
+    text: parsed.terms.join(" "),
+    hasText: parsed.terms.length > 0,
+    from: parsed.filters.from || null,
+    to: parsed.filters.to || null,
+    subject: parsed.filters.subject?.toLowerCase() || null,
+    after: parsed.filters.after || null,
+    before: parsed.filters.before || null,
+    hasAttachment: parsed.filters.hasAttachment || null,
+    limit,
+    ...Object.fromEntries(
+      parsed.phrases.map((phrase, index) => [`phrase${index}`, phrase]),
+    ),
+  };
+  const peopleBindVars = {
+    text: bindVars.text,
+    hasText: bindVars.hasText,
+    limit,
+  };
 
   const results: { messages: unknown[]; people: unknown[] } = {
     messages: [],
@@ -22,23 +61,38 @@ search.get("/search", async (c) => {
     const cursor = await db.query(
       `
       FOR doc IN email_search
-        SEARCH ANALYZER(PHRASE(doc.subject, @q) OR PHRASE(doc.snippet, @q) OR PHRASE(doc.bodyText, @q), "text_en")
+        SEARCH (
+          @hasText == false OR ANALYZER(
+            BOOST(doc.subject IN TOKENS(@text, "text_en"), 5) OR
+            BOOST(doc.fromName IN TOKENS(@text, "text_en"), 3) OR
+            BOOST(doc.bodyText IN TOKENS(@text, "text_en"), 2) OR
+            doc.snippet IN TOKENS(@text, "text_en"),
+            "text_en"
+          )
+        )${phraseSearch}
         LET isMessage = doc._id LIKE "messages/%"
         FILTER isMessage
-        SORT doc.internalDate DESC
+          AND (@from == null OR LOWER(doc.fromEmail) == @from)
+          AND (@to == null OR @to IN doc.to[*].email OR @to IN doc.cc[*].email)
+          AND (@subject == null OR CONTAINS(LOWER(doc.subject), @subject))
+          AND (@after == null OR TO_NUMBER(doc.internalDate) >= @after)
+          AND (@before == null OR TO_NUMBER(doc.internalDate) < @before)
+          AND (@hasAttachment == null OR doc.hasAttachment == @hasAttachment)
+        SORT BM25(doc) DESC, TO_NUMBER(doc.internalDate) DESC
         LIMIT @limit
         RETURN {
           _key: doc._key,
           type: "message",
           subject: doc.subject,
           snippet: doc.snippet,
-          payload: doc.payload,
           internalDate: doc.internalDate,
           gmailUrl: doc.gmailUrl,
-          threadId: doc.threadId
+          threadId: doc.threadId,
+          sender: { name: doc.fromName, email: doc.fromEmail },
+          score: BM25(doc)
         }
       `,
-      { q, limit },
+      bindVars,
     );
     results.messages = await cursor.all();
   }
@@ -47,7 +101,13 @@ search.get("/search", async (c) => {
     const cursor = await db.query(
       `
       FOR doc IN email_search
-        SEARCH ANALYZER(PHRASE(doc.name, @q) OR PHRASE(doc.email, @q), "text_en")
+        SEARCH (
+          @hasText == false OR ANALYZER(
+            BOOST(doc.name IN TOKENS(@text, "text_en"), 3) OR
+            doc.email IN TOKENS(@text, "text_en"),
+            "text_en"
+          )
+        )
         LET isPerson = doc._id LIKE "people/%"
         FILTER isPerson
         SORT BM25(doc) DESC
@@ -60,7 +120,7 @@ search.get("/search", async (c) => {
           score: BM25(doc)
         }
       `,
-      { q, limit },
+      peopleBindVars,
     );
     results.people = await cursor.all();
   }

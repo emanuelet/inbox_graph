@@ -26,28 +26,47 @@ async function ensureSearchView() {
   const views = await db.listViews();
   const exists = views.some((v) => v.name === viewName);
 
-  if (exists) {
-    console.log(`View "${viewName}" already exists`);
-    return;
-  }
-
-  await db.createView(viewName, {
-    type: "arangosearch",
+  const properties = {
     links: {
       messages: {
         fields: {
           subject: { analyzers: ["text_en"] },
           snippet: { analyzers: ["text_en"] },
           bodyText: { analyzers: ["text_en"] },
+          fromName: { analyzers: ["text_en"] },
+          fromEmail: { analyzers: ["text_en", "identity"] },
+          to: {
+            fields: {
+              name: { analyzers: ["text_en"] },
+              email: { analyzers: ["text_en", "identity"] },
+            },
+          },
+          cc: {
+            fields: {
+              name: { analyzers: ["text_en"] },
+              email: { analyzers: ["text_en", "identity"] },
+            },
+          },
         },
       },
       people: {
         fields: {
           name: { analyzers: ["text_en"] },
-          email: { analyzers: ["text_en"] },
+          email: { analyzers: ["text_en", "identity"] },
         },
       },
     },
+  };
+
+  if (exists) {
+    await db.view(viewName).updateProperties(properties);
+    console.log(`Updated ArangoSearch view "${viewName}"`);
+    return;
+  }
+
+  await db.createView(viewName, {
+    type: "arangosearch",
+    ...properties,
   });
 
   console.log(`Created ArangoSearch view "${viewName}"`);

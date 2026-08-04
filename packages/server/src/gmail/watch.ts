@@ -15,7 +15,6 @@ export async function setupGmailWatch() {
     await gmail.users.watch({
       userId: "me",
       requestBody: {
-        labelIds: ["INBOX"],
         topicName: `projects/${config.cloudTasks.projectId}/topics/${config.cloudTasks.topic}`,
       },
     });

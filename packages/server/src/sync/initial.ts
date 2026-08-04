@@ -1,4 +1,5 @@
 import type { gmail_v1 } from "googleapis";
+import { randomUUID } from "node:crypto";
 import pLimit from "p-limit";
 import { db } from "../db/index.js";
 import { getGmailClient } from "../gmail/client.js";
@@ -9,7 +10,6 @@ const CHUNK_SIZE = 50;
 const PAGE_SIZE = 100;
 
 const threadLimit = pLimit(CONCURRENCY);
-const messageLimit = pLimit(CONCURRENCY);
 
 async function fetchAllThreadIds(): Promise<string[]> {
   const gmail = getGmailClient();
@@ -36,35 +36,21 @@ async function fetchAllThreadIds(): Promise<string[]> {
   return threadIds;
 }
 
-async function fetchMessageIdsInThread(threadId: string): Promise<string[]> {
+async function fetchMessagesInThread(
+  threadId: string,
+): Promise<gmail_v1.Schema$Message[]> {
   const gmail = getGmailClient();
 
-  const thread = await gmail.users.threads.get({
-    userId: "me",
-    id: threadId,
-    format: "metadata",
-  });
-
-  return (thread.data.messages || [])
-    .map((m) => m.id)
-    .filter((id): id is string => id !== null && id !== undefined);
-}
-
-async function fetchMessageDetail(
-  id: string,
-): Promise<gmail_v1.Schema$Message | null> {
-  const gmail = getGmailClient();
   try {
-    const response = await gmail.users.messages.get({
+    const response = await gmail.users.threads.get({
       userId: "me",
-      id,
-      format: "metadata",
-      metadataHeaders: ["From", "To", "Cc", "Subject", "Date"],
+      id: threadId,
+      format: "full",
     });
-    return response.data;
+    return response.data.messages || [];
   } catch (error) {
-    console.error(`Failed to fetch message ${id}:`, error);
-    return null;
+    console.error(`Failed to fetch thread ${threadId}:`, error);
+    throw new Error(`Failed to fetch thread ${threadId}`);
   }
 }
 
@@ -80,6 +66,59 @@ async function saveHistoryId(historyId: string) {
   );
 }
 
+async function reconcileFullSync(fullSyncId: string) {
+  await db.query(
+    `
+    FOR edge IN in_thread
+      LET message = DOCUMENT(edge._from)
+      FILTER message == null OR message.fullSyncId != @fullSyncId
+      REMOVE edge IN in_thread
+    `,
+    { fullSyncId },
+  );
+  await db.query(
+    `
+    FOR edge IN sent_by
+      LET message = DOCUMENT(edge._from)
+      FILTER message == null OR message.fullSyncId != @fullSyncId
+      REMOVE edge IN sent_by
+    `,
+    { fullSyncId },
+  );
+  await db.query(
+    `
+    FOR edge IN received_by
+      LET message = DOCUMENT(edge._from)
+      FILTER message == null OR message.fullSyncId != @fullSyncId
+      REMOVE edge IN received_by
+    `,
+    { fullSyncId },
+  );
+  await db.query(
+    `
+    FOR message IN messages
+      FILTER message.fullSyncId != @fullSyncId
+      REMOVE message IN messages
+    `,
+    { fullSyncId },
+  );
+  await db.query(
+    `
+    FOR person IN people
+      FILTER LENGTH(FOR edge IN sent_by FILTER edge._to == person._id RETURN 1) == 0
+        AND LENGTH(FOR edge IN received_by FILTER edge._to == person._id RETURN 1) == 0
+      REMOVE person IN people
+    `,
+  );
+  await db.query(
+    `
+    FOR thread IN threads
+      FILTER LENGTH(FOR edge IN in_thread FILTER edge._to == thread._id RETURN 1) == 0
+      REMOVE thread IN threads
+    `,
+  );
+}
+
 export async function runInitialSync() {
   console.log("Starting initial sync...");
 
@@ -88,6 +127,7 @@ export async function runInitialSync() {
 
   let maxHistoryId = "0";
   let processedCount = 0;
+  const fullSyncId = randomUUID();
 
   for (let i = 0; i < threadIds.length; i += CHUNK_SIZE) {
     const chunk = threadIds.slice(i, i + CHUNK_SIZE);
@@ -95,35 +135,28 @@ export async function runInitialSync() {
       `Processing thread chunk ${Math.floor(i / CHUNK_SIZE) + 1}/${Math.ceil(threadIds.length / CHUNK_SIZE)}`,
     );
 
-    const messageIdsResults = await Promise.allSettled(
+    const threadResults = await Promise.allSettled(
       chunk.map((threadId) =>
-        threadLimit(() => fetchMessageIdsInThread(threadId)),
+        threadLimit(() => fetchMessagesInThread(threadId)),
       ),
     );
 
-    const messageIds = messageIdsResults
+    const failedThreads = threadResults.filter((result) => result.status === "rejected");
+    if (failedThreads.length > 0) {
+      throw new Error(`Failed to fetch ${failedThreads.length} thread(s)`);
+    }
+
+    const messages = threadResults
       .filter(
-        (r): r is PromiseFulfilledResult<string[]> => r.status === "fulfilled",
+        (result): result is PromiseFulfilledResult<gmail_v1.Schema$Message[]> =>
+          result.status === "fulfilled",
       )
       .flatMap((r) => r.value);
 
-    console.log(`  Fetched ${messageIds.length} message IDs`);
-
-    const detailResults = await Promise.allSettled(
-      messageIds.map((id) => messageLimit(() => fetchMessageDetail(id))),
-    );
-
-    const messages = detailResults
-      .filter(
-        (r): r is PromiseFulfilledResult<gmail_v1.Schema$Message> =>
-          r.status === "fulfilled" && r.value !== null,
-      )
-      .map((r) => r.value);
-
-    console.log(`  Fetched ${messages.length} message details`);
+    console.log(`  Fetched ${messages.length} full messages`);
 
     if (messages.length > 0) {
-      const result = await processMessagesBatch(messages);
+      const result = await processMessagesBatch(messages, fullSyncId);
       if (
         result.maxHistoryId !== "0" &&
         BigInt(result.maxHistoryId) > BigInt(maxHistoryId)
@@ -133,6 +166,12 @@ export async function runInitialSync() {
       processedCount += result.count;
     }
   }
+
+  await reconcileFullSync(fullSyncId);
+
+  // The profile cursor also covers an empty mailbox and changes during the walk.
+  const profile = await getGmailClient().users.getProfile({ userId: "me" });
+  if (profile.data.historyId) maxHistoryId = profile.data.historyId;
 
   if (maxHistoryId !== "0") {
     await saveHistoryId(maxHistoryId);

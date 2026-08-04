@@ -1,6 +1,10 @@
 import type { gmail_v1 } from "googleapis";
 import { db } from "../db/index.js";
-import { safeBase64, extractBodyText } from "../gmail/helpers.js";
+import {
+  safeBase64,
+  extractBodyText,
+  hasAttachment,
+} from "../gmail/helpers.js";
 
 interface ParsedMessage {
   messageId: string;
@@ -14,6 +18,58 @@ interface ParsedMessage {
   to: Array<{ name: string; email: string }>;
   cc: Array<{ name: string; email: string }>;
   historyId: string;
+  labelIds: string[];
+  hasAttachment: boolean;
+}
+
+type Person = { name: string; email: string };
+type Edge = { _key: string; _from: string; _to: string };
+
+export interface MessageEdgeInput {
+  messageId: string;
+  threadId: string;
+  from: Person;
+  to: Person[];
+  cc: Person[];
+}
+
+export function buildMessageEdges(message: MessageEdgeInput): {
+  sentBy: Edge[];
+  receivedBy: Edge[];
+  inThread: Edge[];
+} {
+  const messageRef = `messages/${message.messageId}`;
+  const edgeKey = (kind: string, target: string) =>
+    safeBase64(`${kind}:${message.messageId}:${target}`);
+  const recipients = new Map<string, Person>();
+
+  for (const person of [...message.to, ...message.cc]) {
+    if (person.email) recipients.set(person.email, person);
+  }
+
+  return {
+    sentBy: message.from.email
+      ? [
+          {
+            _key: edgeKey("sent_by", message.from.email),
+            _from: messageRef,
+            _to: `people/${safeBase64(message.from.email)}`,
+          },
+        ]
+      : [],
+    receivedBy: [...recipients.values()].map((person) => ({
+      _key: edgeKey("received_by", person.email),
+      _from: messageRef,
+      _to: `people/${safeBase64(person.email)}`,
+    })),
+    inThread: [
+      {
+        _key: edgeKey("in_thread", message.threadId),
+        _from: messageRef,
+        _to: `threads/${message.threadId}`,
+      },
+    ],
+  };
 }
 
 function parseGmailMessage(
@@ -74,11 +130,14 @@ function parseGmailMessage(
     to: parseAddr(toRaw),
     cc: parseAddr(ccRaw),
     historyId,
+    labelIds: gmailMessage.labelIds || [],
+    hasAttachment: hasAttachment(gmailMessage.payload || {}),
   };
 }
 
 export async function processMessagesBatch(
   messages: gmail_v1.Schema$Message[],
+  fullSyncId?: string,
 ) {
   const parsed: ParsedMessage[] = [];
 
@@ -94,11 +153,17 @@ export async function processMessagesBatch(
     threadId: m.threadId,
     subject: m.subject,
     snippet: m.snippet,
-    payload: m.payload,
     bodyText: m.bodyText,
     internalDate: m.internalDate,
+    fromName: m.from.name,
+    fromEmail: m.from.email,
+    to: m.to,
+    cc: m.cc,
+    labelIds: m.labelIds,
+    hasAttachment: m.hasAttachment,
     gmailUrl: `https://mail.google.com/mail/u/0/#all/${m.messageId}`,
     historyId: m.historyId,
+    ...(fullSyncId ? { fullSyncId } : {}),
   }));
 
   const threadDocs = [...new Set(parsed.map((m) => m.threadId))].map(
@@ -125,37 +190,15 @@ export async function processMessagesBatch(
     name: person.name,
   }));
 
-  const sentByEdges: Array<{ _from: string; _to: string }> = [];
-  const receivedByEdges: Array<{ _from: string; _to: string }> = [];
-  const inThreadEdges: Array<{ _from: string; _to: string }> = [];
+  const sentByEdges: Edge[] = [];
+  const receivedByEdges: Edge[] = [];
+  const inThreadEdges: Edge[] = [];
 
   for (const m of parsed) {
-    if (m.from.email) {
-      sentByEdges.push({
-        _from: `messages/${m.messageId}`,
-        _to: `people/${safeBase64(m.from.email)}`,
-      });
-    }
-    for (const p of m.to) {
-      if (p.email) {
-        receivedByEdges.push({
-          _from: `messages/${m.messageId}`,
-          _to: `people/${safeBase64(p.email)}`,
-        });
-      }
-    }
-    for (const p of m.cc) {
-      if (p.email) {
-        receivedByEdges.push({
-          _from: `messages/${m.messageId}`,
-          _to: `people/${safeBase64(p.email)}`,
-        });
-      }
-    }
-    inThreadEdges.push({
-      _from: `messages/${m.messageId}`,
-      _to: `threads/${m.threadId}`,
-    });
+    const edges = buildMessageEdges(m);
+    sentByEdges.push(...edges.sentBy);
+    receivedByEdges.push(...edges.receivedBy);
+    inThreadEdges.push(...edges.inThread);
   }
 
   await db.query(
@@ -193,25 +236,37 @@ export async function processMessagesBatch(
     );
   }
 
-  const insertEdges = async (
+  const messageIds = parsed.map((message) => `messages/${message.messageId}`);
+
+  const replaceEdges = async (
     collection: string,
-    docs: Array<{ _from: string; _to: string }>,
+    docs: Edge[],
   ) => {
+    await db.query(
+      `
+      FOR edge IN @@collection
+        FILTER edge._from IN @messageIds
+        REMOVE edge IN @@collection
+      `,
+      { "@collection": collection, messageIds },
+    );
+
     if (docs.length === 0) return;
     await db.query(
       `
       FOR doc IN @docs
+        UPSERT { _key: doc._key }
         INSERT doc
+        UPDATE doc
         IN @@collection
-        OPTIONS { overwriteMode: 'ignore' }
       `,
       { "@collection": collection, docs },
     );
   };
 
-  await insertEdges("sent_by", sentByEdges);
-  await insertEdges("received_by", receivedByEdges);
-  await insertEdges("in_thread", inThreadEdges);
+  await replaceEdges("sent_by", sentByEdges);
+  await replaceEdges("received_by", receivedByEdges);
+  await replaceEdges("in_thread", inThreadEdges);
 
   let maxHistoryId = "0";
   for (const m of parsed) {

@@ -32,9 +32,11 @@
     <ResultsList
       v-else-if="results && !showThread"
       :messages="results"
+      :people="peopleResults"
       :person="person"
       :stats="stats"
       @select-thread="openThread"
+      @select-person="openPerson"
     />
 
     <ThreadView
@@ -64,6 +66,7 @@ const searchInput = ref<HTMLInputElement>()
 const loading = ref(false)
 const error = ref('')
 const results = ref<MessageData[] | null>(null)
+const peopleResults = ref<Array<{ _key: string; name: string; email: string }>>([])
 const person = ref<{ name: string; email: string; _key: string } | null>(null)
 const stats = ref<{ sent: number; received: number; threads: number } | null>(null)
 const showThread = ref(false)
@@ -98,22 +101,19 @@ async function doSearch() {
 
   showThread.value = false
   threadMessages.value = null
+  peopleResults.value = []
   error.value = ''
   loading.value = true
 
   try {
     if (EMAIL_RE.test(q)) {
-      const res = await fetch(`${API}/search/graph/person/${encodeURIComponent(q)}`)
-      if (!res.ok) throw new Error('Person not found')
-      const data = await res.json()
-      results.value = data.messages
-      person.value = data.person
-      stats.value = data.stats
+      await openPerson(q)
     } else {
-      const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}&type=messages&limit=50`)
+      const res = await fetch(`${API}/search?q=${encodeURIComponent(q)}&type=all&limit=50`)
       if (!res.ok) throw new Error('Search failed')
       const data = await res.json()
       results.value = data.results.messages
+      peopleResults.value = data.results.people
       person.value = null
       stats.value = null
     }
@@ -123,6 +123,16 @@ async function doSearch() {
   } finally {
     loading.value = false
   }
+}
+
+async function openPerson(email: string) {
+  const res = await fetch(`${API}/search/graph/person/${encodeURIComponent(email)}`)
+  if (!res.ok) throw new Error('Person not found')
+  const data = await res.json()
+  results.value = data.messages
+  peopleResults.value = []
+  person.value = data.person
+  stats.value = data.stats
 }
 
 async function openThread(threadId: string) {
