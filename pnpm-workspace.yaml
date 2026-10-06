@@ -1,9 +1,14 @@
 packages:
   - packages/*
 overrides:
+  "@grpc/grpc-js": 1.14.5
   brace-expansion: 2.1.4
   immutable: 5.1.8
+  nanoid: 3.3.18
   protobufjs: 7.6.5
+  qs: 6.16.0
+  shell-quote: 1.11.0
+  source-map-js: 1.2.2
 trustPolicy: off
 onlyBuiltDependencies:
   - esbuild
@@ -11,5 +16,3 @@ onlyBuiltDependencies:
 allowBuilds:
   esbuild: true
   protobufjs: true
-minimumReleaseAgeExclude:
-  - hono@4.12.34
